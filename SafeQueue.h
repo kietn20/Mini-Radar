@@ -2,6 +2,7 @@
 #include <queue>
 #include <mutex>
 #include <condition_variable>
+#include <iostream>
 
 template <typename T>
 class SafeQueue
@@ -10,36 +11,56 @@ private:
     std::queue<T> queue;
     std::mutex mtx;
     std::condition_variable cv;
+    size_t maxSize;
+    bool active; // Shutdown flag
 
 public:
-    // Add an item to the queue
+    // Constructor with default max size
+    SafeQueue(size_t size = 10) : maxSize(size), active(true) {}
+
     void push(T value)
     {
+        std::lock_guard<std::mutex> lock(mtx);
+
+        // BUFFER OVERFLOW PROTECTION
+        // If queue is full, drop the oldest data to make room
+        if (queue.size() >= maxSize)
         {
-            std::lock_guard<std::mutex> lock(mtx);
-            queue.push(std::move(value));
-        } // Lock is released here when lock_guard goes out of scope
-        cv.notify_one(); // Wake up one waiting thread
+            std::cout << "[SafeQueue] Warning: Buffer Full! Dropping old data." << std::endl;
+            queue.pop(); // Remove oldest
+        }
+
+        queue.push(std::move(value));
+        cv.notify_one();
     }
 
-    // Get an item from the queue (waits if empty)
-    T pop()
+    // Returns true if value popped, false if queue was shutdown
+    bool pop(T &value)
     {
         std::unique_lock<std::mutex> lock(mtx);
 
-        // Wait until the queue is not empty.
-        // The lambda []{ return !queue.empty(); } prevents "Spurious Wakeups"
+        // Wait until queue has data OR system is shutting down
         cv.wait(lock, [this]
-                { return !queue.empty(); });
+                { return !queue.empty() || !active; });
 
-        T value = std::move(queue.front());
+        // If we woke up because of shutdown and queue is empty, return false
+        if (!active && queue.empty())
+        {
+            return false;
+        }
+
+        value = std::move(queue.front());
         queue.pop();
-        return value;
+        return true;
     }
 
-    bool isEmpty()
+    // Signal all threads to stop waiting
+    void shutdown()
     {
-        std::lock_guard<std::mutex> lock(mtx);
-        return queue.empty();
+        {
+            std::lock_guard<std::mutex> lock(mtx);
+            active = false;
+        }
+        cv.notify_all(); // Wake up everyone
     }
 };
