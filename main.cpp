@@ -1,41 +1,42 @@
 #include <iostream>
 #include <thread>
+#include <atomic>
 #include "SafeQueue.h"
-
-void producer(SafeQueue<int> &q)
-{
-    for (int i = 1; i <= 5; ++i)
-    {
-        std::cout << "[Producer] Generating Signal: " << i << std::endl;
-        q.push(i);
-        std::this_thread::sleep_for(std::chrono::milliseconds(500));
-    }
-}
-
-void consumer(SafeQueue<int> &q)
-{
-    for (int i = 1; i <= 5; ++i)
-    {
-        int val = q.pop();
-        std::cout << "[Consumer] Processed Signal: " << val << std::endl;
-    }
-}
+#include "RadarGenerator.h"
+#include "RadarProcessor.h"
 
 int main()
 {
-    SafeQueue<int> radarSignalQueue;
+    // Set a small buffer size (e.g., 3) to force the "Buffer Full" warning test
+    SafeQueue<std::unique_ptr<Target>> radarQueue(3);
+    std::atomic<bool> isRunning{true};
 
-    std::cout << "--- Starting Multi-threaded Communication Test ---" << std::endl;
+    RadarGenerator generator(radarQueue, isRunning);
+    RadarProcessor processor(radarQueue, isRunning);
 
-    // Launch two threads
-    std::thread producerThread(producer, std::ref(radarSignalQueue));
-    std::thread consumerThread(consumer, std::ref(radarSignalQueue));
+    std::cout << "--- Radar System Online (Buffered) ---" << std::endl;
 
-    // Wait for both threads to finish
-    producerThread.join();
-    consumerThread.join();
+    std::thread genThread(&RadarGenerator::run, &generator);
+    std::thread procThread(&RadarProcessor::run, &processor);
 
-    std::cout << "--- Test Complete ---" << std::endl;
+    // Run for 5 seconds
+    std::this_thread::sleep_for(std::chrono::seconds(5));
+
+    std::cout << "--- Shutting Down System ---" << std::endl;
+
+    // 1. Tell threads to stop their loops
+    isRunning = false;
+
+    // 2. Wake up the processor if it's stuck waiting
+    radarQueue.shutdown();
+
+    // 3. Cleanly join threads
+    if (genThread.joinable())
+        genThread.join();
+    if (procThread.joinable())
+        procThread.join();
+
+    std::cout << "--- System Offline ---" << std::endl;
 
     return 0;
 }
