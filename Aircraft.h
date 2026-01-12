@@ -1,32 +1,34 @@
 #pragma once
 #include "Target.h"
-#include <iostream>
 
 class HostileJet : public Target
 {
 public:
-    using Target::Target; // Inherit the constructor
-
+    using Target::Target;
     void updatePosition() override
     {
-        x += speed * 2.0; // Jets move fast
-        y += speed * 1.5;
+        x += speed;
+        y += speed;
     }
-
     std::string getType() const override { return "Hostile Jet"; }
+};
+
+class FriendlyHelicopter : public Target
+{
+public:
+    using Target::Target;
+    void updatePosition() override
+    {
+        x += speed * 0.2;
+        y += speed * 0.1;
+    }
+    std::string getType() const override { return "Friendly Heli"; }
 };
 
 class Noise : public Target
 {
 public:
     using Target::Target;
-
-    void updatePosition() override
-    {
-        // Random erratic movement
-        x += (rand() % 10 - 5) * 0.1;
-        y += (rand() % 10 - 5) * 0.1;
-    }
-
-    std::string getType() const override { return "Atmospheric Noise"; }
+    void updatePosition() override { /* Noise doesn't move logically */ }
+    std::string getType() const override { return "Noise"; }
 };
